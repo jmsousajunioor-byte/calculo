@@ -48,7 +48,7 @@ export async function renderCalculoPdfBuffer(dados: CalculoResultado): Promise<B
   doc.text(`Tipo de Cálculo: ${dados.tipo_calculo}`)
   doc.text(`Período: ${new Date(dados.data_inicio).toLocaleDateString('pt-BR')} até ${new Date(dados.data_final).toLocaleDateString('pt-BR')}`)
   doc.text(`Data da Citação: ${new Date(dados.data_citacao).toLocaleDateString('pt-BR')}`)
-  doc.text(`INPC Acumulado: ${(dados.acumulado_inpc * 100).toFixed(2)}% ${dados.utilizou_fallback ? '(Fallback)' : ''}`)
+  doc.text(`INPC Acumulado: ${(Number(dados.acumulado_inpc ?? 0) * 100).toFixed(2)}% ${dados.utilizou_fallback ? '(Fallback)' : ''}`)
 
   doc.moveDown(1)
   doc.fillColor('#2563eb').fontSize(12).text('Detalhamento mensal')
@@ -67,9 +67,9 @@ export async function renderCalculoPdfBuffer(dados: CalculoResultado): Promise<B
     if (y > 760) { doc.addPage(); y = 40 }
     doc.text(linha.mes, colX[0], y)
     doc.text(`R$ ${formatCurrency(linha.valor_base)}`, colX[1], y)
-    doc.text((linha.inpc_pct).toFixed(2) + '%', colX[2], y)
+  doc.text(`${Number(linha.inpc_pct ?? 0).toFixed(2)}%`, colX[2], y)
     doc.text(`R$ ${formatCurrency(linha.apos_inpc)}`, colX[3], y)
-    doc.text((linha.juros_pct).toFixed(2) + '%', colX[4], y)
+  doc.text(`${Number(linha.juros_pct ?? 0).toFixed(2)}%`, colX[4], y)
     doc.text(`R$ ${formatCurrency(linha.apos_juros)}`, colX[5], y)
     y += rowHeight
   }
