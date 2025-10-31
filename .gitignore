@@ -1,0 +1,17 @@
+# PHP dependencies
+/vendor/
+
+# Runtime cache / logs / temp
+/storage/pdfs/
+/server-*.log
+/.phpunit.result.cache
+
+# Env and OS
+/.env
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+

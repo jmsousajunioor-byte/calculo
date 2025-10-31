@@ -1,6 +1,7 @@
 {
   "version": 2,
   "installCommand": "rm -rf vendor",
+  "buildCommand": "COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader",
   "functions": {
     "api/index.php": {
       "runtime": "vercel-php@0.6.0"
