@@ -1,0 +1,25 @@
+CREATE DATABASE IF NOT EXISTS calculo CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE calculo;
+
+CREATE TABLE IF NOT EXISTS users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  email VARCHAR(120) NOT NULL UNIQUE,
+  password VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS calculos (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  titulo VARCHAR(150),
+  valor_base DECIMAL(12,2),
+  data_inicio DATE,
+  data_citacao DATE,
+  data_final DATE,
+  tipo_calculo VARCHAR(100),
+  resultado DECIMAL(12,2),
+  arquivo_pdf VARCHAR(255),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_calculos_users FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
