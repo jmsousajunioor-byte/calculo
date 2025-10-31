@@ -1,6 +1,21 @@
 import type { CalculoResultado } from './calculo'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 
 type PDFDocumentConstructor = typeof import('pdfkit')
+
+let cachedFont: Buffer | null = null
+
+function loadFontBuffer(): Buffer {
+  if (cachedFont) return cachedFont
+  const fontPath = process.env.CALCULO_PDF_FONT_PATH || path.join(process.cwd(), 'public', 'fonts', 'Inter-Regular.otf')
+  try {
+    cachedFont = readFileSync(fontPath)
+  } catch (error) {
+    throw new Error(`Não foi possível carregar a fonte para o PDF em ${fontPath}. Ajuste CALCULO_PDF_FONT_PATH ou garanta que Inter-Regular.otf esteja em public/fonts. Detalhes: ${(error as Error).message}`)
+  }
+  return cachedFont
+}
 
 function formatCurrency(v: number) {
   return v.toFixed(2).replace('.', ',')
@@ -11,6 +26,9 @@ export async function renderCalculoPdfBuffer(dados: CalculoResultado): Promise<B
     default: PDFDocumentConstructor
   }
   const doc = new PDFDocument({ size: 'A4', margin: 40 })
+  const fontBuffer = loadFontBuffer()
+  doc.registerFont('Inter', fontBuffer)
+  doc.font('Inter')
   const chunks: Buffer[] = []
   doc.on('data', (c) => chunks.push(c as Buffer))
   const done = new Promise<Buffer>((resolve) => {
