@@ -38,7 +38,13 @@ export async function obterSerieInpc(inicio: Date, fim: Date): Promise<SerieMens
   if (Array.isArray(json)) {
     const maybe = json?.[0]?.resultados?.[0]?.series?.[0]?.serie
     if (maybe && typeof maybe === 'object') {
-      serie = maybe as SerieMensal
+      const map: SerieMensal = {}
+      for (const [key, val] of Object.entries(maybe)) {
+        if (val == null) continue
+        const n = Number(String(val).replace(',', '.'))
+        if (!Number.isNaN(n)) map[key] = n
+      }
+      serie = map
     }
   }
   if (!serie) {

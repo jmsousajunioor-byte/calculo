@@ -83,7 +83,8 @@ export async function processCalculo(params: {
   while (cursor.getFullYear() < endMonth.getFullYear() || (cursor.getFullYear() === endMonth.getFullYear() && cursor.getMonth() <= endMonth.getMonth())) {
     const mesCodigo = cursor.getFullYear().toString() + String(cursor.getMonth() + 1).padStart(2, '0')
     const mesLabel = `${String(cursor.getMonth() + 1).padStart(2, '0')}/${cursor.getFullYear()}`
-    const inpcPct = serieInpc[mesCodigo] ?? 0
+    const rawInpc = Number(serieInpc[mesCodigo] ?? 0)
+    const inpcPct = Number.isFinite(rawInpc) ? rawInpc : 0
     const valorAntes = valorBase
     valorAposInpc = valorAposInpc * (1 + (inpcPct / 100))
     const aplicaJuros = endOfMonth(cursor) >= inicioJuros
