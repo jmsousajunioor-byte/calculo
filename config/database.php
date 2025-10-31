@@ -15,11 +15,11 @@ class Database
             return self::$connection;
         }
 
-        // Defaults for local development; override in production via env vars
+        // Defaults para ambiente local; em produção usar variáveis de ambiente
         $host = getenv('DB_HOST') ?: '127.0.0.1';
         $port = getenv('DB_PORT') ?: '3306';
         $name = getenv('DB_NAME') ?: 'calculo';
-        $user = getenv('DB_USER') ?: 'hoot';
+        $user = getenv('DB_USER') ?: 'root';
         $pass = getenv('DB_PASS') ?: '';
         $charset = 'utf8mb4';
 
@@ -40,5 +40,3 @@ class Database
         return self::$connection;
     }
 }
-lic
-Abrir a porta no firewall (se ainda não

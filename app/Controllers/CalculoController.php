@@ -163,7 +163,12 @@ class CalculoController extends BaseController
         }
 
         $path = $calculo['arquivo_pdf'];
-        $absolutePath = BASE_PATH . '/' . ltrim($path, '/');
+        if (is_string($path) && strlen($path) > 0 && $path[0] === '/') {
+            // caminho absoluto (ex.: /tmp em Vercel)
+            $absolutePath = $path;
+        } else {
+            $absolutePath = BASE_PATH . '/' . ltrim((string)$path, '/');
+        }
 
         if (!file_exists($absolutePath)) {
             http_response_code(404);
@@ -371,16 +376,22 @@ class CalculoController extends BaseController
         $dompdf->render();
 
         $filename = sprintf('calculo_%d_%s.pdf', $userId, date('YmdHis'));
-        $relativePath = 'storage/pdfs/' . $filename;
-        $absolutePath = BASE_PATH . '/' . $relativePath;
-
-        if (!is_dir(dirname($absolutePath))) {
-            mkdir(dirname($absolutePath), 0775, true);
+        $isVercel = getenv('VERCEL') || getenv('VERCEL_URL');
+        if ($isVercel) {
+            $dir = '/tmp/pdfs';
+            if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
+            $absolutePath = rtrim($dir, '/') . '/' . $filename;
+            file_put_contents($absolutePath, $dompdf->output());
+            return $absolutePath; // salva o caminho absoluto para posterior download
+        } else {
+            $relativePath = 'storage/pdfs/' . $filename;
+            $absolutePath = BASE_PATH . '/' . $relativePath;
+            if (!is_dir(dirname($absolutePath))) {
+                mkdir(dirname($absolutePath), 0775, true);
+            }
+            file_put_contents($absolutePath, $dompdf->output());
+            return $relativePath;
         }
-
-        file_put_contents($absolutePath, $dompdf->output());
-
-        return $relativePath;
     }
 
     private function montarTabelaMensal(

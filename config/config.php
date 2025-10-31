@@ -23,6 +23,13 @@ function app_base_url(): string
         return rtrim($envBase, '/');
     }
 
+    // Detecta domínio em Vercel
+    $vercelUrl = getenv('VERCEL_URL'); // ex: my-app.vercel.app
+    if (!empty($vercelUrl)) {
+        $scheme = 'https';
+        return $scheme . '://' . rtrim($vercelUrl, '/');
+    }
+
     // If running without web server context (e.g., CLI), use fallback
     if (empty($_SERVER['HTTP_HOST'])) {
         return rtrim(APP_BASE_URL_FALLBACK, '/');
