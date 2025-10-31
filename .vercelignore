@@ -1,0 +1,14 @@
+# Excluir artefatos e diretórios que atrapalham o build do runtime PHP
+vendor/
+storage/pdfs/
+server-*.log
+composer.phar
+composer-setup.php
+packages.json
+.git/
+.github/
+.idea/
+.vscode/
+*.bak
+*.tmp
+
