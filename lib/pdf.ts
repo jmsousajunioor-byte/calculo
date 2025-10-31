@@ -8,11 +8,12 @@ let cachedFont: Buffer | null = null
 
 function loadFontBuffer(): Buffer {
   if (cachedFont) return cachedFont
-  const fontPath = process.env.CALCULO_PDF_FONT_PATH || path.join(process.cwd(), 'public', 'fonts', 'Inter-Regular.otf')
+  const fontPath = process.env.CALCULO_PDF_FONT_PATH
+    || path.join(process.cwd(), 'node_modules', '@fontsource', 'inter', 'files', 'inter-latin-400-normal.woff')
   try {
     cachedFont = readFileSync(fontPath)
   } catch (error) {
-    throw new Error(`Não foi possível carregar a fonte para o PDF em ${fontPath}. Ajuste CALCULO_PDF_FONT_PATH ou garanta que Inter-Regular.otf esteja em public/fonts. Detalhes: ${(error as Error).message}`)
+    throw new Error(`Não foi possível carregar a fonte para o PDF em ${fontPath}. Ajuste CALCULO_PDF_FONT_PATH ou instale @fontsource/inter. Detalhes: ${(error as Error).message}`)
   }
   return cachedFont
 }

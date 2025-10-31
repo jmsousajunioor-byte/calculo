@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
     "@supabase/supabase-js": "^2.45.2",
     "@types/pdfkit": "^0.17.3",
     "date-fns": "^4.1.0",

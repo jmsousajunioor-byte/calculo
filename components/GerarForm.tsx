@@ -30,11 +30,20 @@ export function GerarForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form)
       })
-      const j = await res.json().catch(() => ({}))
       if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
         throw new Error(j?.error || 'Falha ao gerar cálculo')
       }
-      window.location.href = '/meus-calculos'
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      const safeTitle = form.titulo.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'calculo'
+      link.download = `${safeTitle}_${Date.now()}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
     } catch (err: any) {
       setError(err.message || 'Erro inesperado')
     } finally {
@@ -92,4 +101,3 @@ export function GerarForm() {
     </form>
   )
 }
-

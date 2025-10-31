@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSession } from '@/lib/session'
 import { processCalculo } from '@/lib/calculo'
-import { uploadPdfToStorage, getSupabaseService } from '@/lib/supabase'
 
 const schema = z.object({
   titulo: z.string().optional().default(''),
@@ -41,30 +40,17 @@ export async function POST(req: Request) {
       inicioJuros: parsed.inicio_juros && parsed.inicio_juros.trim() ? parsed.inicio_juros : undefined,
     })
 
-    // Gera PDF em memória e envia ao storage
+    // Gera PDF em memória e devolve para download imediato
     const pdfBuffer = await import('@/lib/pdf').then(m => m.renderCalculoPdfBuffer(resultado))
-    const fileName = `calculo_${session.user.id}_${Date.now()}.pdf`
-    const { publicUrl, path } = await uploadPdfToStorage(fileName, pdfBuffer)
-
-    // Salva no banco
-    const supabase = getSupabaseService()
-    const { error } = await supabase.from('calculos').insert({
-      user_id: session.user.id,
-      titulo: resultado.titulo,
-      valor_base: resultado.valor_base,
-      data_inicio: resultado.data_inicio,
-      data_citacao: resultado.data_citacao,
-      data_final: resultado.data_final,
-      tipo_calculo: resultado.tipo_calculo,
-      resultado: resultado.resultado,
-      arquivo_pdf_path: path,
-      arquivo_pdf_url: publicUrl,
+    const fileName = `${resultado.titulo.replace(/[^a-zA-Z0-9-_]+/g, '_') || 'calculo'}_${Date.now()}.pdf`
+    return new NextResponse(pdfBuffer as any, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="${encodeURIComponent(fileName)}"`,
+        'Content-Length': String(pdfBuffer.length),
+      },
     })
-    if (error) throw error
-
-    return NextResponse.json({ ok: true })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Erro' }, { status: 400 })
   }
 }
-
