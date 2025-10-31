@@ -1,12 +1,15 @@
-import PDFDocument from 'pdfkit'
-
 import type { CalculoResultado } from './calculo'
+
+type PDFDocumentConstructor = typeof import('pdfkit')
 
 function formatCurrency(v: number) {
   return v.toFixed(2).replace('.', ',')
 }
 
 export async function renderCalculoPdfBuffer(dados: CalculoResultado): Promise<Buffer> {
+  const { default: PDFDocument } = (await import('pdfkit/js/pdfkit.standalone.js')) as unknown as {
+    default: PDFDocumentConstructor
+  }
   const doc = new PDFDocument({ size: 'A4', margin: 40 })
   const chunks: Buffer[] = []
   doc.on('data', (c) => chunks.push(c as Buffer))
@@ -63,4 +66,3 @@ export async function renderCalculoPdfBuffer(dados: CalculoResultado): Promise<B
   doc.end()
   return done
 }
-
