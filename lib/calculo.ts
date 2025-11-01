@@ -109,15 +109,17 @@ export async function processCalculo(params: {
     }
     const aposInpc = valorBase * factor
 
-    // Juros: aplicar juros mensal composto a partir do mês em que endOfMonth(mm) >= inicioJuros
-    let jurosMonths = 0
-    let jm = new Date(parcelaMonth.getFullYear(), parcelaMonth.getMonth(), 1)
-    while (jm.getFullYear() < endMonth.getFullYear() || (jm.getFullYear() === endMonth.getFullYear() && jm.getMonth() <= endMonth.getMonth())) {
-      if (endOfMonth(jm) >= inicioJuros && jurosMensal > 0) jurosMonths++
-      jm = addMonths(jm, 1)
-    }
-    const withJuros = aposInpc * Math.pow(1 + jurosMensal, jurosMonths)
-    const jurosAmount = withJuros - aposInpc
+    // Juros: simples 1% a.m. aplicados desde a data de início dos juros (ou do vencimento, se posterior)
+    const jurosStart = (() => {
+      // parcela due date: end of parcela month
+      const parcelaDue = new Date(parcelaMonth.getFullYear(), parcelaMonth.getMonth(), 1)
+      // juros começam a partir do maior entre inicioJuros e data de vencimento da parcela
+      return endOfMonth(parcelaDue) > inicioJuros ? endOfMonth(parcelaDue) : inicioJuros
+    })()
+
+    // meses de juros = diferença em meses (ano*12 + mes) entre jurosStart e dataFinal (ignora dias, conta meses inteiros)
+    const mesesJuros = Math.max(0, (dataFinal.getFullYear() - jurosStart.getFullYear()) * 12 + (dataFinal.getMonth() - jurosStart.getMonth()))
+    const jurosAmount = aposInpc * (jurosMensal * mesesJuros)
 
     totalInpcSum += aposInpc
     totalJurosSum += jurosAmount
