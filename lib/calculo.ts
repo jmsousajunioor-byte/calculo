@@ -38,6 +38,7 @@ export async function processCalculo(params: {
   tipoCalculo: string
   inpcOverride?: number // em %
   jurosMensalPct?: number // em %
+  dataFimParcelas?: string // opcional: até quando as parcelas (ex: aluguéis) foram devidas
   inicioJuros?: string
 }): Promise<CalculoResultado> {
   const titulo = params.titulo
@@ -71,34 +72,85 @@ export async function processCalculo(params: {
     ? params.jurosMensalPct / 100
     : JUROS_MENSAL_PADRAO
 
-  // Tabela detalhada
+  // Tabela detalhada por mês (para exibição) e cálculo de totais por parcela
   const linhas: LinhaMensal[] = []
   const serieInpc = await obterSerieInpc(dataInicio, dataFinal)
-  let cursor = new Date(dataInicio.getFullYear(), dataInicio.getMonth(), 1)
-  let valorAposInpc = valorBase
-  let valorFinal = valorBase
-  let totalJuros = 0
+  // data fim das parcelas (opcional). Se não informada, usa dataFinal - comportamento antigo
+  const lastParcelMonth = params.dataFimParcelas ? parseLocalDate(params.dataFimParcelas) : dataFinal
 
+  // Construir meses para exibição (do início até a data final da contagem)
+  let cursor = new Date(dataInicio.getFullYear(), dataInicio.getMonth(), 1)
   const endMonth = new Date(dataFinal.getFullYear(), dataFinal.getMonth(), 1)
+
+  // Totais corretos: somar cada parcela (valorBase) corrigida individualmente até dataFinal
+  let totalInpcSum = 0
+  let totalJurosSum = 0
+
+  // Lista de meses em que houve parcela devida (ex: aluguéis) — de dataInicio até lastParcelMonth
+  const parcelasMonths: Date[] = []
+  let p = new Date(dataInicio.getFullYear(), dataInicio.getMonth(), 1)
+  const lastParcelMonthKey = new Date(lastParcelMonth.getFullYear(), lastParcelMonth.getMonth(), 1)
+  while (p.getFullYear() < lastParcelMonthKey.getFullYear() || (p.getFullYear() === lastParcelMonthKey.getFullYear() && p.getMonth() <= lastParcelMonthKey.getMonth())) {
+    parcelasMonths.push(new Date(p))
+    p = addMonths(p, 1)
+  }
+
+  // Para cada parcela, computar sua correção por INPC até dataFinal e juros compostos mensais se aplicável
+  for (const parcelaMonth of parcelasMonths) {
+    // INPC acumulado desde o mês da parcela até dataFinal
+    let factor = 1
+    let mm = new Date(parcelaMonth.getFullYear(), parcelaMonth.getMonth(), 1)
+    while (mm.getFullYear() < endMonth.getFullYear() || (mm.getFullYear() === endMonth.getFullYear() && mm.getMonth() <= endMonth.getMonth())) {
+      const code = mm.getFullYear().toString() + String(mm.getMonth() + 1).padStart(2, '0')
+      const raw = Number(serieInpc[code] ?? 0)
+      const pct = Number.isFinite(raw) ? raw : 0
+      factor *= (1 + pct / 100)
+      mm = addMonths(mm, 1)
+    }
+    const aposInpc = valorBase * factor
+
+    // Juros: aplicar juros mensal composto a partir do mês em que endOfMonth(mm) >= inicioJuros
+    let jurosMonths = 0
+    let jm = new Date(parcelaMonth.getFullYear(), parcelaMonth.getMonth(), 1)
+    while (jm.getFullYear() < endMonth.getFullYear() || (jm.getFullYear() === endMonth.getFullYear() && jm.getMonth() <= endMonth.getMonth())) {
+      if (endOfMonth(jm) >= inicioJuros && jurosMensal > 0) jurosMonths++
+      jm = addMonths(jm, 1)
+    }
+    const withJuros = aposInpc * Math.pow(1 + jurosMensal, jurosMonths)
+    const jurosAmount = withJuros - aposInpc
+
+    totalInpcSum += aposInpc
+    totalJurosSum += jurosAmount
+  }
+
+  // Construir tabela de exibição mês a mês (valor_base é mostrado apenas enquanto houver parcela devida)
   while (cursor.getFullYear() < endMonth.getFullYear() || (cursor.getFullYear() === endMonth.getFullYear() && cursor.getMonth() <= endMonth.getMonth())) {
     const mesCodigo = cursor.getFullYear().toString() + String(cursor.getMonth() + 1).padStart(2, '0')
     const mesLabel = `${String(cursor.getMonth() + 1).padStart(2, '0')}/${cursor.getFullYear()}`
     const rawInpc = Number(serieInpc[mesCodigo] ?? 0)
     const inpcPct = Number.isFinite(rawInpc) ? rawInpc : 0
-    const valorAntes = valorBase
-    valorAposInpc = valorAposInpc * (1 + (inpcPct / 100))
+
+    // valor_base só é devido enquanto cursor <= lastParcelMonth
+    const parcelaDevida = cursor.getFullYear() < lastParcelMonthKey.getFullYear() || (cursor.getFullYear() === lastParcelMonthKey.getFullYear() && cursor.getMonth() <= lastParcelMonthKey.getMonth())
+    const valorAntes = parcelaDevida ? valorBase : 0
+
     const aplicaJuros = endOfMonth(cursor) >= inicioJuros
     const jurosPct = aplicaJuros ? (jurosMensal * 100) : 0
-    let valorAposJuros = valorAposInpc
-    if (aplicaJuros && jurosMensal > 0) {
-      const inc = valorAposInpc * jurosMensal
-      totalJuros += inc
-      valorAposJuros += inc
-    }
-    linhas.push({ mes: mesLabel, valor_base: valorAntes, inpc_pct: inpcPct, apos_inpc: valorAposInpc, juros_pct: jurosPct, apos_juros: valorAposJuros })
-    valorFinal = valorAposJuros
+
+    // Para exibição simplificada, mostrar apos_inpc como valor acumulado do capital fictício (mantendo compatibilidade visual)
+    // calculamos um valor aproximado sequencial similar ao comportamento anterior
+    const prev = linhas.length > 0 ? linhas[linhas.length - 1].apos_inpc : valorBase
+    const aposInpcDisplay = parcelaDevida ? prev * (1 + inpcPct / 100) : prev
+    const aposJurosDisplay = aplicaJuros ? aposInpcDisplay * (1 + jurosMensal) : aposInpcDisplay
+
+    linhas.push({ mes: mesLabel, valor_base: valorAntes, inpc_pct: inpcPct, apos_inpc: aposInpcDisplay, juros_pct: jurosPct, apos_juros: aposJurosDisplay })
     cursor = addMonths(cursor, 1)
   }
+
+  // Totais finais
+  const valorCorrigidoTotal = totalInpcSum
+  const totalJuros = totalJurosSum
+  const resultadoTotal = valorCorrigidoTotal + totalJuros
 
   return {
     titulo,
@@ -112,9 +164,9 @@ export async function processCalculo(params: {
     juros_mensal: jurosMensal,
     inicio_juros: inicioJuros.toISOString(),
     tabela_mensal: linhas,
-    valor_corrigido: valorAposInpc,
-    valor_juros: totalJuros,
-    resultado: valorFinal,
+    valor_corrigido: Number(valorCorrigidoTotal),
+    valor_juros: Number(totalJuros),
+    resultado: Number(resultadoTotal),
   }
 }
 
