@@ -3,11 +3,13 @@ import { buscarInpcAcumulado, listarPeriodosMensais, obterSerieInpc } from './in
 
 export type LinhaMensal = {
   mes: string
-  valor_base: number
-  inpc_pct: number
-  apos_inpc: number
-  juros_pct: number
-  apos_juros: number
+  vencimento: string // ex: 05/05/24
+  valor_original: number
+  inpc_acumulado_pct: number
+  valor_corrigido: number
+  meses_juros: number
+  juros_valor: number
+  total: number
 }
 
 export type CalculoResultado = {
@@ -72,32 +74,42 @@ export async function processCalculo(params: {
     ? params.jurosMensalPct / 100
     : JUROS_MENSAL_PADRAO
 
-  // Tabela detalhada por mês (para exibição) e cálculo de totais por parcela
+  // Tabela detalhada por parcela (cada parcela representa uma obrigação mensal)
   const linhas: LinhaMensal[] = []
   const serieInpc = await obterSerieInpc(dataInicio, dataFinal)
-  // data fim das parcelas (opcional). Se não informada, usa dataFinal - comportamento antigo
-  const lastParcelMonth = params.dataFimParcelas ? parseLocalDate(params.dataFimParcelas) : dataFinal
+  // data fim das parcelas (opcional). Se não informada, usa dataFinal como último mês de parcelas
+  const lastParcelDate = params.dataFimParcelas ? parseLocalDate(params.dataFimParcelas) : dataFinal
 
-  // Construir meses para exibição (do início até a data final da contagem)
-  let cursor = new Date(dataInicio.getFullYear(), dataInicio.getMonth(), 1)
+  const parcelas: { mesDate: Date; vencimentoStr: string; valorOriginal: number }[] = []
+  // montar meses de parcelas desde dataInicio até lastParcelDate (incluindo mês parcial)
+  let pm = new Date(dataInicio.getFullYear(), dataInicio.getMonth(), 1)
+  const lastParcelMonthKey = new Date(lastParcelDate.getFullYear(), lastParcelDate.getMonth(), 1)
+  while (pm.getFullYear() < lastParcelMonthKey.getFullYear() || (pm.getFullYear() === lastParcelMonthKey.getFullYear() && pm.getMonth() <= lastParcelMonthKey.getMonth())) {
+    parcelas.push({ mesDate: new Date(pm), vencimentoStr: `${String(pm.getDate()).padStart(2,'0')}/${String(pm.getMonth()+1).padStart(2,'0')}/${pm.getFullYear()}`, valorOriginal: valorBase })
+    pm = addMonths(pm, 1)
+  }
+  // if last parcel is partial (dataFimParcelas day not last day of month), prorate last parcela
+  if (params.dataFimParcelas) {
+    const lp = parseLocalDate(params.dataFimParcelas)
+    const lastIdx = parcelas.length - 1
+    if (lastIdx >= 0) {
+      const monthStart = new Date(parcelas[lastIdx].mesDate.getFullYear(), parcelas[lastIdx].mesDate.getMonth(), 1)
+      const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate()
+      const daysDue = Math.min(Math.max(lp.getDate(), 0), daysInMonth)
+      if (daysDue < daysInMonth) {
+        parcelas[lastIdx].valorOriginal = Math.round((valorBase * (daysDue / daysInMonth)) * 100) / 100
+      }
+      parcelas[lastIdx].vencimentoStr = `${String(monthStart.getDate()).padStart(2,'0')}/${String(monthStart.getMonth()+1).padStart(2,'0')}/${monthStart.getFullYear()}`
+    }
+  }
+
   const endMonth = new Date(dataFinal.getFullYear(), dataFinal.getMonth(), 1)
-
-  // Totais corretos: somar cada parcela (valorBase) corrigida individualmente até dataFinal
   let totalInpcSum = 0
   let totalJurosSum = 0
 
-  // Lista de meses em que houve parcela devida (ex: aluguéis) — de dataInicio até lastParcelMonth
-  const parcelasMonths: Date[] = []
-  let p = new Date(dataInicio.getFullYear(), dataInicio.getMonth(), 1)
-  const lastParcelMonthKey = new Date(lastParcelMonth.getFullYear(), lastParcelMonth.getMonth(), 1)
-  while (p.getFullYear() < lastParcelMonthKey.getFullYear() || (p.getFullYear() === lastParcelMonthKey.getFullYear() && p.getMonth() <= lastParcelMonthKey.getMonth())) {
-    parcelasMonths.push(new Date(p))
-    p = addMonths(p, 1)
-  }
-
-  // Para cada parcela, computar sua correção por INPC até dataFinal e juros compostos mensais se aplicável
-  for (const parcelaMonth of parcelasMonths) {
-    // INPC acumulado desde o mês da parcela até dataFinal
+  for (const pItem of parcelas) {
+    const parcelaMonth = pItem.mesDate
+    // INPC acumulado desde o mês da parcela até dataFinal (produto dos fatores mensais)
     let factor = 1
     let mm = new Date(parcelaMonth.getFullYear(), parcelaMonth.getMonth(), 1)
     while (mm.getFullYear() < endMonth.getFullYear() || (mm.getFullYear() === endMonth.getFullYear() && mm.getMonth() <= endMonth.getMonth())) {
@@ -107,52 +119,35 @@ export async function processCalculo(params: {
       factor *= (1 + pct / 100)
       mm = addMonths(mm, 1)
     }
-    const aposInpc = valorBase * factor
+    const inpcAcumuladoPct = (factor - 1) * 100
+    const valorCorrigido = Math.round(pItem.valorOriginal * factor * 100) / 100
 
-    // Juros: simples 1% a.m. aplicados desde a data de início dos juros (ou do vencimento, se posterior)
-    const jurosStart = (() => {
-      // parcela due date: end of parcela month
-      const parcelaDue = new Date(parcelaMonth.getFullYear(), parcelaMonth.getMonth(), 1)
-      // juros começam a partir do maior entre inicioJuros e data de vencimento da parcela
-      return endOfMonth(parcelaDue) > inicioJuros ? endOfMonth(parcelaDue) : inicioJuros
-    })()
+    // Juros simples: começam a partir do maior entre a data de citação (inicioJuros) e o vencimento da parcela (end of month)
+    const parcelaDueEnd = endOfMonth(parcelaMonth)
+    const jurosStartDate = parcelaDueEnd > inicioJuros ? parcelaDueEnd : inicioJuros
+    const mesesJuros = Math.max(0, (dataFinal.getFullYear() - jurosStartDate.getFullYear()) * 12 + (dataFinal.getMonth() - jurosStartDate.getMonth()))
+    const jurosValor = Math.round((valorCorrigido * (jurosMensal * mesesJuros)) * 100) / 100
 
-    // meses de juros = diferença em meses (ano*12 + mes) entre jurosStart e dataFinal (ignora dias, conta meses inteiros)
-    const mesesJuros = Math.max(0, (dataFinal.getFullYear() - jurosStart.getFullYear()) * 12 + (dataFinal.getMonth() - jurosStart.getMonth()))
-    const jurosAmount = aposInpc * (jurosMensal * mesesJuros)
+    const totalParcela = Math.round((valorCorrigido + jurosValor) * 100) / 100
 
-    totalInpcSum += aposInpc
-    totalJurosSum += jurosAmount
+    totalInpcSum += valorCorrigido
+    totalJurosSum += jurosValor
+
+    linhas.push({
+      mes: `${String(parcelaMonth.getMonth()+1).padStart(2,'0')}/${parcelaMonth.getFullYear()}`,
+      vencimento: `${String(parcelaMonth.getDate()).padStart(2,'0')}/${String(parcelaMonth.getMonth()+1).padStart(2,'0')}/${parcelaMonth.getFullYear()}`,
+      valor_original: pItem.valorOriginal,
+      inpc_acumulado_pct: Math.round(inpcAcumuladoPct * 100) / 100,
+      valor_corrigido: valorCorrigido,
+      meses_juros: mesesJuros,
+      juros_valor: jurosValor,
+      total: totalParcela,
+    })
   }
 
-  // Construir tabela de exibição mês a mês (valor_base é mostrado apenas enquanto houver parcela devida)
-  while (cursor.getFullYear() < endMonth.getFullYear() || (cursor.getFullYear() === endMonth.getFullYear() && cursor.getMonth() <= endMonth.getMonth())) {
-    const mesCodigo = cursor.getFullYear().toString() + String(cursor.getMonth() + 1).padStart(2, '0')
-    const mesLabel = `${String(cursor.getMonth() + 1).padStart(2, '0')}/${cursor.getFullYear()}`
-    const rawInpc = Number(serieInpc[mesCodigo] ?? 0)
-    const inpcPct = Number.isFinite(rawInpc) ? rawInpc : 0
-
-    // valor_base só é devido enquanto cursor <= lastParcelMonth
-    const parcelaDevida = cursor.getFullYear() < lastParcelMonthKey.getFullYear() || (cursor.getFullYear() === lastParcelMonthKey.getFullYear() && cursor.getMonth() <= lastParcelMonthKey.getMonth())
-    const valorAntes = parcelaDevida ? valorBase : 0
-
-    const aplicaJuros = endOfMonth(cursor) >= inicioJuros
-    const jurosPct = aplicaJuros ? (jurosMensal * 100) : 0
-
-    // Para exibição simplificada, mostrar apos_inpc como valor acumulado do capital fictício (mantendo compatibilidade visual)
-    // calculamos um valor aproximado sequencial similar ao comportamento anterior
-    const prev = linhas.length > 0 ? linhas[linhas.length - 1].apos_inpc : valorBase
-    const aposInpcDisplay = parcelaDevida ? prev * (1 + inpcPct / 100) : prev
-    const aposJurosDisplay = aplicaJuros ? aposInpcDisplay * (1 + jurosMensal) : aposInpcDisplay
-
-    linhas.push({ mes: mesLabel, valor_base: valorAntes, inpc_pct: inpcPct, apos_inpc: aposInpcDisplay, juros_pct: jurosPct, apos_juros: aposJurosDisplay })
-    cursor = addMonths(cursor, 1)
-  }
-
-  // Totais finais
-  const valorCorrigidoTotal = totalInpcSum
-  const totalJuros = totalJurosSum
-  const resultadoTotal = valorCorrigidoTotal + totalJuros
+  const valorCorrigidoTotal = Math.round(totalInpcSum * 100) / 100
+  const totalJuros = Math.round(totalJurosSum * 100) / 100
+  const resultadoTotal = Math.round((valorCorrigidoTotal + totalJuros) * 100) / 100
 
   return {
     titulo,

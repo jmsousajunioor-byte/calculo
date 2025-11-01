@@ -89,33 +89,67 @@ export async function renderCalculoPdfBuffer(dados: CalculoResultado): Promise<B
   headers.forEach((h, i) => doc.text(h, colX[i] - 4, y - 2))
   y += rowHeight
 
-  // rows
+  // rows (parcela-oriented table)
   let rowIndex = 0
+  // smaller font for dense table
+  const rowFontSize = 9
   for (const linha of dados.tabela_mensal) {
     if (y > 760) { doc.addPage(); y = 40 }
     // alternate row shading
     if (rowIndex % 2 === 0) {
       doc.rect(36, y - 4, 523, rowHeight).fill('#fbfdff')
     }
-    doc.fillColor('#0f172a').fontSize(10)
-    doc.text(linha.mes, colX[0] - 4, y)
-    doc.text(`R$ ${formatCurrency(linha.valor_base)}`, colX[1] - 4, y)
-    doc.text(`${Number(linha.inpc_pct ?? 0).toFixed(2)}%`, colX[2] - 4, y)
-    doc.text(`R$ ${formatCurrency(linha.apos_inpc)}`, colX[3] - 4, y)
-    doc.text(`${Number(linha.juros_pct ?? 0).toFixed(2)}%`, colX[4] - 4, y)
-    doc.text(`R$ ${formatCurrency(linha.apos_juros)}`, colX[5] - 4, y)
+    doc.fillColor('#0f172a').fontSize(rowFontSize)
+    // Columns: Parcela, Vencimento, Valor Original, INPC %, Valor Corrigido, Meses Juros, Juros (R$), Total (R$)
+    const cx = [40, 90, 160, 240, 320, 400, 460, 520]
+    doc.text(linha.mes, cx[0] - 4, y)
+    doc.text(linha.vencimento, cx[1] - 4, y)
+    doc.text(`R$ ${formatCurrency(linha.valor_original)}`, cx[2] - 4, y)
+    doc.text(`${Number(linha.inpc_acumulado_pct ?? 0).toFixed(2)}%`, cx[3] - 4, y)
+    doc.text(`R$ ${formatCurrency(linha.valor_corrigido)}`, cx[4] - 4, y)
+    doc.text(String(linha.meses_juros), cx[5] - 4, y)
+    doc.text(`R$ ${formatCurrency(linha.juros_valor)}`, cx[6] - 4, y)
+    doc.text(`R$ ${formatCurrency(linha.total)}`, cx[7] - 20, y)
     y += rowHeight
     rowIndex++
   }
 
   doc.addPage()
-  doc.fillColor('#2563eb').fontSize(12).text('Totais')
+  // Totals card
+  doc.addPage()
+  doc.fillColor('#2563eb').fontSize(14).text('Totais', { underline: false })
   doc.moveDown(0.5)
-  doc.fillColor('#0f172a').fontSize(12)
-  doc.text(`Valor total com juros: R$ ${formatCurrency(dados.valor_juros)}`)
-  doc.text(`Valor total com INPC: R$ ${formatCurrency(dados.valor_corrigido)}`)
-  doc.text(`Valor total geral: R$ ${formatCurrency(dados.resultado)}`)
+  const tcardX = 40
+  const tcardW = 300
+  const tcardY = doc.y
+  doc.rect(tcardX, tcardY, tcardW, 90).fill('#f8fafc')
+  doc.fillColor('#0f172a').fontSize(11)
+  doc.text(`Valor total com INPC: R$ ${formatCurrency(dados.valor_corrigido)}`, tcardX + 12, tcardY + 12)
+  doc.text(`Valor total apenas de juros: R$ ${formatCurrency(dados.valor_juros)}`, tcardX + 12, tcardY + 32)
+  doc.fontSize(12).fillColor('#0b74ff').text(`Valor total geral: R$ ${formatCurrency(dados.resultado)}`, tcardX + 12, tcardY + 56)
+
+  doc.moveDown(6)
 
   doc.end()
   return done
+}
+
+// Seção de interpretação jurídica (texto fixo). Não usei AI aqui — se quiser, posso integrar um serviço
+// de geração de texto mais tarde. O texto abaixo segue a explicação padrão adotada no sistema.
+function renderInterpretacao(doc: any, yStart: number) {
+  let y = yStart
+  doc.fontSize(12).fillColor('#0f172a').text('Interpretação jurídica', 40, y)
+  y += 18
+  doc.fontSize(10).fillColor('#0f172a')
+  const bullets = [
+    'Correção (INPC): aplicada desde o vencimento de cada parcela; recomposição inflacionária.',
+    'Juros (1% a.m.): contados desde a citação apenas sobre parcelas já vencidas; para parcelas posteriores, incidem a partir do vencimento.',
+    'Atualização parcial (meio mês): o sistema aplica proporcionalidade diária quando a parcela final for parcial.',
+    'Caso a sentença fixe outra taxa ou outro marco, substitua os parâmetros conforme indicado.'
+  ]
+  for (const b of bullets) {
+    doc.circle(44, y + 4, 2).fill('#0b74ff')
+    doc.fillColor('#0f172a').text(b, 52, y, { width: 480 })
+    y += 16
+  }
 }
