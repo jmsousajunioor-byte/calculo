@@ -4,16 +4,23 @@ import path from 'node:path'
 
 type PDFDocumentConstructor = typeof import('pdfkit')
 
-let cachedFont: Buffer | null = null
+// cachedFont holds the raw font buffer when available. If not available we
+// gracefully fall back to a standard PDF font so the PDF generation still
+// works in environments where @fontsource/inter isn't installed (AWS
+// Lambda, Vercel serverless, etc.).
+let cachedFont: Buffer | null | undefined = undefined
 
-function loadFontBuffer(): Buffer {
-  if (cachedFont) return cachedFont
+function loadFontBuffer(): Buffer | null {
+  if (cachedFont !== undefined) return cachedFont
   const fontPath = process.env.CALCULO_PDF_FONT_PATH
     || path.join(process.cwd(), 'node_modules', '@fontsource', 'inter', 'files', 'inter-latin-400-normal.woff')
   try {
     cachedFont = readFileSync(fontPath)
   } catch (error) {
-    throw new Error(`Não foi possível carregar a fonte para o PDF em ${fontPath}. Ajuste CALCULO_PDF_FONT_PATH ou instale @fontsource/inter. Detalhes: ${(error as Error).message}`)
+    // Instead of throwing, record absence and return null so caller can
+    // choose a safe fallback font. This avoids surfacing the file-system
+    // error to end-users when running in restricted environments.
+    cachedFont = null
   }
   return cachedFont
 }
@@ -28,8 +35,18 @@ export async function renderCalculoPdfBuffer(dados: CalculoResultado): Promise<B
   }
   const doc = new PDFDocument({ size: 'A4', margin: 40 })
   const fontBuffer = loadFontBuffer()
-  doc.registerFont('Inter', fontBuffer)
-  doc.font('Inter')
+  if (fontBuffer) {
+    try {
+      doc.registerFont('Inter', fontBuffer)
+      doc.font('Inter')
+    } catch (err) {
+      // If registration fails for any reason, fall back to a standard font.
+      doc.font('Helvetica')
+    }
+  } else {
+    // Use a standard built-in PDF font when the custom font isn't available.
+    doc.font('Helvetica')
+  }
   const chunks: Buffer[] = []
   doc.on('data', (c) => chunks.push(c as Buffer))
   const done = new Promise<Buffer>((resolve) => {
