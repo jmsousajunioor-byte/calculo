@@ -78,9 +78,9 @@ export async function renderCalculoPdfBuffer(dados: CalculoResultado, interpreta
   doc.moveDown(1)
   doc.fillColor('#2563eb').fontSize(12).text('Detalhamento mensal')
 
-  // Table header with modern styling
-  const headers = ['Mês', 'Valor base (R$)', 'INPC (%)', 'Após INPC (R$)', 'Juros (%)', 'Após Juros (R$)']
-  const colX = [40, 140, 260, 350, 450, 520]
+  // Table header with modern styling — columns match requested layout.
+  const headers = ['Parcela', 'Vencimento', 'Valor Original (R$)', 'INPC Acumulado', 'Valor Corrigido (R$)', 'Meses de Juros', 'Juros 1% a.m. (R$)', 'Total (R$)']
+  const colX = [40, 90, 160, 260, 340, 420, 480, 540]
   const rowHeight = 20
   let y = doc.y + 8
   // header background
@@ -100,8 +100,9 @@ export async function renderCalculoPdfBuffer(dados: CalculoResultado, interpreta
       doc.rect(36, y - 4, 523, rowHeight).fill('#fbfdff')
     }
     doc.fillColor('#0f172a').fontSize(rowFontSize)
-    // Columns: Parcela, Vencimento, Valor Original, INPC %, Valor Corrigido, Meses Juros, Juros (R$), Total (R$)
-    const cx = [40, 90, 160, 240, 320, 400, 460, 520]
+    // Columns: Parcela, Vencimento, Valor Original, INPC Acumulado, Valor Corrigido, Meses de Juros, Juros (R$), Total (R$)
+    const cx = colX
+    // parcela label: format as 'Mai/24' using month names shorter
     doc.text(linha.mes, cx[0] - 4, y)
     doc.text(linha.vencimento, cx[1] - 4, y)
     doc.text(`R$ ${formatCurrency(linha.valor_original)}`, cx[2] - 4, y)
@@ -109,7 +110,7 @@ export async function renderCalculoPdfBuffer(dados: CalculoResultado, interpreta
     doc.text(`R$ ${formatCurrency(linha.valor_corrigido)}`, cx[4] - 4, y)
     doc.text(String(linha.meses_juros), cx[5] - 4, y)
     doc.text(`R$ ${formatCurrency(linha.juros_valor)}`, cx[6] - 4, y)
-    doc.text(`R$ ${formatCurrency(linha.total)}`, cx[7] - 20, y)
+    doc.text(`R$ ${formatCurrency(linha.total)}`, cx[7] - 24, y)
     y += rowHeight
     rowIndex++
   }

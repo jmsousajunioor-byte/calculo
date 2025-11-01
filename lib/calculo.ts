@@ -1,4 +1,4 @@
-import { addMonths, endOfMonth } from 'date-fns'
+import { addMonths, endOfMonth, addDays } from 'date-fns'
 import { buscarInpcAcumulado, listarPeriodosMensais, obterSerieInpc } from './inpc'
 
 export type LinhaMensal = {
@@ -80,12 +80,13 @@ export async function processCalculo(params: {
   // data fim das parcelas (opcional). Se não informada, usa dataFinal como último mês de parcelas
   const lastParcelDate = params.dataFimParcelas ? parseLocalDate(params.dataFimParcelas) : dataFinal
 
-  const parcelas: { mesDate: Date; vencimentoStr: string; valorOriginal: number }[] = []
+  const parcelas: { mesDate: Date; vencimentoDay: number; vencimentoStr: string; valorOriginal: number }[] = []
   // montar meses de parcelas desde dataInicio até lastParcelDate (incluindo mês parcial)
-  let pm = new Date(dataInicio.getFullYear(), dataInicio.getMonth(), 1)
+  // Preserve o dia do vencimento informado em dataInicio (ex: 05 de cada mês).
+  let pm = new Date(dataInicio.getFullYear(), dataInicio.getMonth(), dataInicio.getDate())
   const lastParcelMonthKey = new Date(lastParcelDate.getFullYear(), lastParcelDate.getMonth(), 1)
   while (pm.getFullYear() < lastParcelMonthKey.getFullYear() || (pm.getFullYear() === lastParcelMonthKey.getFullYear() && pm.getMonth() <= lastParcelMonthKey.getMonth())) {
-    parcelas.push({ mesDate: new Date(pm), vencimentoStr: `${String(pm.getDate()).padStart(2,'0')}/${String(pm.getMonth()+1).padStart(2,'0')}/${pm.getFullYear()}`, valorOriginal: valorBase })
+    parcelas.push({ mesDate: new Date(pm.getFullYear(), pm.getMonth(), pm.getDate()), vencimentoDay: pm.getDate(), vencimentoStr: `${String(pm.getDate()).padStart(2,'0')}/${String(pm.getMonth()+1).padStart(2,'0')}/${pm.getFullYear()}`, valorOriginal: valorBase })
     pm = addMonths(pm, 1)
   }
   // if last parcel is partial (dataFimParcelas day not last day of month), prorate last parcela
@@ -99,7 +100,9 @@ export async function processCalculo(params: {
       if (daysDue < daysInMonth) {
         parcelas[lastIdx].valorOriginal = Math.round((valorBase * (daysDue / daysInMonth)) * 100) / 100
       }
-      parcelas[lastIdx].vencimentoStr = `${String(monthStart.getDate()).padStart(2,'0')}/${String(monthStart.getMonth()+1).padStart(2,'0')}/${monthStart.getFullYear()}`
+      // keep vencimento day as original configured day
+      const vd = parcelas[lastIdx].vencimentoDay
+      parcelas[lastIdx].vencimentoStr = `${String(vd).padStart(2,'0')}/${String(monthStart.getMonth()+1).padStart(2,'0')}/${monthStart.getFullYear()}`
     }
   }
 
@@ -122,10 +125,22 @@ export async function processCalculo(params: {
     const inpcAcumuladoPct = (factor - 1) * 100
     const valorCorrigido = Math.round(pItem.valorOriginal * factor * 100) / 100
 
-    // Juros simples: começam a partir do maior entre a data de citação (inicioJuros) e o vencimento da parcela (end of month)
-    const parcelaDueEnd = endOfMonth(parcelaMonth)
-    const jurosStartDate = parcelaDueEnd > inicioJuros ? parcelaDueEnd : inicioJuros
-    const mesesJuros = Math.max(0, (dataFinal.getFullYear() - jurosStartDate.getFullYear()) * 12 + (dataFinal.getMonth() - jurosStartDate.getMonth()))
+    // Juros simples: regra aplicada conforme interpretação jurídica:
+    // - Se a parcela já estava vencida na data da citação (vencimento <= inicioJuros),
+    //   os juros começam a contar a partir da citação (inicioJuros).
+    // - Se a parcela vence após a citação, os juros começam a contar no dia seguinte ao vencimento.
+    const vencimentoDate = new Date(parcelaMonth.getFullYear(), parcelaMonth.getMonth(), pItem.vencimentoDay)
+    let jurosStartDate: Date
+    if (vencimentoDate <= inicioJuros) {
+      jurosStartDate = inicioJuros
+    } else {
+      jurosStartDate = addDays(vencimentoDate, 1)
+    }
+    // Calcular meses inteiros de juros entre jurosStartDate e dataFinal.
+    let mesesJuros = (dataFinal.getFullYear() - jurosStartDate.getFullYear()) * 12 + (dataFinal.getMonth() - jurosStartDate.getMonth())
+    // Ajuste por dia do mês: se o dia final é antes do dia inicial, subtrai 1
+    if (dataFinal.getDate() < jurosStartDate.getDate()) mesesJuros -= 1
+    mesesJuros = Math.max(0, mesesJuros)
     const jurosValor = Math.round((valorCorrigido * (jurosMensal * mesesJuros)) * 100) / 100
 
     const totalParcela = Math.round((valorCorrigido + jurosValor) * 100) / 100
