@@ -29,7 +29,7 @@ function formatCurrency(v: number) {
   return v.toFixed(2).replace('.', ',')
 }
 
-export async function renderCalculoPdfBuffer(dados: CalculoResultado): Promise<Buffer> {
+export async function renderCalculoPdfBuffer(dados: CalculoResultado, interpretacaoText?: string): Promise<Buffer> {
   const { default: PDFDocument } = (await import('pdfkit/js/pdfkit.standalone.js')) as unknown as {
     default: PDFDocumentConstructor
   }
@@ -114,7 +114,6 @@ export async function renderCalculoPdfBuffer(dados: CalculoResultado): Promise<B
     rowIndex++
   }
 
-  doc.addPage()
   // Totals card
   doc.addPage()
   doc.fillColor('#2563eb').fontSize(14).text('Totais', { underline: false })
@@ -129,6 +128,18 @@ export async function renderCalculoPdfBuffer(dados: CalculoResultado): Promise<B
   doc.fontSize(12).fillColor('#0b74ff').text(`Valor total geral: R$ ${formatCurrency(dados.resultado)}`, tcardX + 12, tcardY + 56)
 
   doc.moveDown(6)
+  // Render the legal interpretation. If an explicit text was provided use it,
+  // otherwise the internal fallback renderer produces a standard bullet list.
+  const interpStartY = doc.y + 10
+  if (interpretacaoText && interpretacaoText.trim().length > 0) {
+    // Simple paragraph rendering for the generated text
+    doc.moveDown(0.5)
+    doc.fillColor('#0f172a').fontSize(12).text('Interpretação jurídica', 40)
+    doc.moveDown(0.5)
+    doc.fontSize(10).fillColor('#0f172a').text(interpretacaoText, { width: 520 })
+  } else {
+    renderInterpretacao(doc, interpStartY)
+  }
 
   doc.end()
   return done

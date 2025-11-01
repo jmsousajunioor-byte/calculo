@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSession } from '@/lib/session'
 import { processCalculo } from '@/lib/calculo'
+import { generateInterpretacao } from '@/lib/interpretacao'
 import { uploadPdfToStorage, getSupabaseService } from '@/lib/supabase'
 
 const schema = z.object({
@@ -43,8 +44,11 @@ export async function POST(req: Request) {
       inicioJuros: parsed.inicio_juros && parsed.inicio_juros.trim() ? parsed.inicio_juros : undefined,
     })
 
-    // Gera PDF em memória
-    const pdfBuffer = await import('@/lib/pdf').then(m => m.renderCalculoPdfBuffer(resultado))
+  // Gera a interpretação (se houver chave de AI configurada) e o PDF em
+  // memória. Falhas na geração da interpretação não impedem a geração do
+  // PDF — usamos um fallback interno.
+  const interpretacao = await generateInterpretacao(resultado)
+  const pdfBuffer = await import('@/lib/pdf').then(m => m.renderCalculoPdfBuffer(resultado, interpretacao))
     const fileName = `${resultado.titulo.replace(/[^a-zA-Z0-9-_]+/g, '_') || 'calculo'}_${Date.now()}.pdf`
 
     // Envia para o storage e grava o registro no banco
