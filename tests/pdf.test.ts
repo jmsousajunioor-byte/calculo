@@ -13,8 +13,8 @@ const exemplo = {
   juros_mensal: 0.01,
   inicio_juros: new Date().toISOString(),
   tabela_mensal: [
-    { mes: '01/2024', valor_base: 100, inpc_pct: 0.5, apos_inpc: 100.5, juros_pct: 1, apos_juros: 101.505 },
-    { mes: '02/2024', valor_base: 100, inpc_pct: 0.4, apos_inpc: 100.4, juros_pct: 1, apos_juros: 101.404 }
+    { mes: '01/2024', vencimento: '01/01/2024', valor_original: 100, inpc_acumulado_pct: 0.5, valor_corrigido: 100.5, meses_juros: 2, juros_valor: 2.01, total: 102.51 },
+    { mes: '02/2024', vencimento: '01/02/2024', valor_original: 100, inpc_acumulado_pct: 0.4, valor_corrigido: 100.4, meses_juros: 1, juros_valor: 1.004, total: 101.404 }
   ],
   valor_corrigido: 100.8,
   valor_juros: 2,
