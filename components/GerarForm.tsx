@@ -8,6 +8,7 @@ export function GerarForm() {
     tipo_calculo: '',
     juros_mensal: '1.00',
     inicio_juros: '',
+    data_fim_parcelas: '',
     data_inicio: '',
     data_citacao: '',
     data_final: '',
@@ -87,6 +88,11 @@ export function GerarForm() {
       <div>
         <label className="block text-sm font-medium text-slate-600 mb-1">Data final</label>
         <input required type="date" value={form.data_final} onChange={(e) => set('data_final', e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-600 mb-1">Data término das parcelas (opcional)</label>
+        <input type="date" value={form.data_fim_parcelas} onChange={(e) => set('data_fim_parcelas', e.target.value)} className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm shadow-sm focus:border-primary-500 focus:ring-primary-500" />
+        <p className="text-xs text-slate-400 mt-1">Se informado, as parcelas (ex: aluguéis) serão consideradas devidas apenas até esta data; juros e INPC seguirão até a data final do cálculo.</p>
       </div>
       <div className="md:col-span-2">
         <label className="flex items-center gap-2 text-sm font-medium text-slate-600 mb-1">Fallback INPC (%) <span className="text-xs font-normal text-slate-400">(opcional)</span></label>
